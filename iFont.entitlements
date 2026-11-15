@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- iCloud Drive 앱 전용 폴더에 폰트·아이콘그룹 JSON 을 둔다. 샌드박스는 쓰지 않는다 -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.moimz.iFont</string>
+	</array>
+	<key>com.apple.developer.ubiquity-container-identifiers</key>
+	<array>
+		<string>iCloud.com.moimz.iFont</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudDocuments</string>
+	</array>
+	<!-- Developer ID 로 내보내도 같은 저장소를 쓰게 운영 환경으로 맞춘다 (inPlayer 와 같음) -->
+	<key>com.apple.developer.icloud-container-environment</key>
+	<string>Production</string>
+</dict>
+</plist>
