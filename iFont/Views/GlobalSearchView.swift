@@ -81,9 +81,7 @@ struct GlobalSearchView: View {
 	}
 
 	private func cell(_ g: FontGlyph, in font: FontDoc) -> Cell {
-		var shape = SVGPath.cgPath(g.path)
-		if let group = store.group(g.groupID), let icon = store.icon(of: g),
-		   let p = IconShape.fontPath(icon, in: group, weight: font.weight) { shape = p }
+		let shape = FontExport.shape(g, in: font, store: store)
 		let source = store.group(g.groupID).map { "\n원본: \($0.name)" } ?? ""
 		return Cell(id: "f" + g.id, shape: shape, width: g.width, em: Double(font.unitsPerEm), label: font.prefix + g.name,
 		            tooltip: "\(font.prefix)\(g.name)  \(g.code.cssEscape)" + (g.section.map { "\n폰트 안 그룹: \($0)" } ?? "") + source) {

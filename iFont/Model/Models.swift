@@ -201,6 +201,8 @@ struct FontDoc: Identifiable, Codable, Hashable {
 	var hinting: Bool = true
 	/// 선 굵기 (24px 기준 px). nil 이면 원본 굵기. 선 그룹 원본 아이콘에만 적용하고 채우기 원본은 그대로 둔다
 	var weight: Double? = nil
+	/// 크기 배율. 내보낼 때 글리프를 em 가운데 기준으로 키운다(선 굵기는 그대로). 원본 아이콘은 바뀌지 않는다
+	var scale: Double = 1
 	/// 큰 버전. CSS 의 @version 은 "큰 버전.아이콘 수.내려받은 횟수" (예: 5.245.1)
 	var version: Int = 1
 	/// 폰트를 내려받은 횟수. 내려받을 때마다 1씩 늘어 버전 끝자리가 된다 (폰트 파일에 같이 저장되어 같이 동기화된다)
@@ -231,6 +233,7 @@ struct FontDoc: Identifiable, Codable, Hashable {
 		ascent = try c.decode(Int.self, forKey: .ascent)
 		hinting = try c.decode(Bool.self, forKey: .hinting)
 		weight = try c.decodeIfPresent(Double.self, forKey: .weight)
+		scale = try c.decodeIfPresent(Double.self, forKey: .scale) ?? 1
 		version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
 		downloads = try c.decodeIfPresent(Int.self, forKey: .downloads) ?? 0
 		cssHeader = try c.decodeIfPresent(String.self, forKey: .cssHeader) ?? ""

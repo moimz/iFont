@@ -364,11 +364,9 @@ struct FontGlyphGrid: View {
 		return icon.tags?.contains { $0.lowercased().contains(q) } ?? false
 	}
 
-	/// 폰트 선 굵기를 적용한 모양. 굵기 설정이 없거나 채우기 원본이면 폰트에 복사해 둔 모양
+	/// 폰트 선 굵기·크기 배율을 적용한 모양 (내보낼 모양과 같다)
 	private func shape(_ glyph: FontGlyph) -> CGPath {
-		if let group = store.group(glyph.groupID), let icon = store.icon(of: glyph),
-		   let p = IconShape.fontPath(icon, in: group, weight: font.weight) { return p }
-		return SVGPath.cgPath(glyph.path)
+		FontExport.shape(glyph, in: font, store: store)
 	}
 
 	private func tooltip(_ glyph: FontGlyph) -> String {

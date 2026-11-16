@@ -37,17 +37,32 @@ enum IconShape {
 		icon.hasStrokes ? PathWriter.string(outline(icon, width: nil)) : icon.path
 	}
 
-	/// 폰트 선 굵기를 적용한 폰트 아이콘 모양. 선 그룹 원본만 그 굵기로 선을 긋고, 채우기 원본은 그대로 둔다.
-	/// weight 가 nil 이면 nil (폰트에 복사해 둔 원본 굵기 모양을 쓴다)
-	static func fontPath(_ icon: Icon, in group: IconGroup, weight: Double?) -> CGPath? {
-		guard let weight, group.style == .stroke, icon.hasStrokes else { return nil }
+	/// 폰트 선 굵기·크기 배율을 적용한 폰트 아이콘 모양. 선 그룹 원본만 그 굵기로 선을 긋고, 채우기 원본은 그대로 둔다.
+	/// 배율은 선 중심을 em 가운데 기준으로 키운 뒤 선을 그어서 선 굵기는 바뀌지 않는다.
+	/// weight 가 nil 이고 배율이 1 이면 nil (폰트에 복사해 둔 원본 굵기 모양을 쓴다)
+	static func fontPath(_ icon: Icon, in group: IconGroup, weight: Double?, scale: Double = 1) -> CGPath? {
+		guard weight != nil || scale != 1, group.style == .stroke, icon.hasStrokes else { return nil }
 		var h = Hasher()
-		h.combine("font"); h.combine(icon.path); h.combine(icon.strokes); h.combine(weight)
+		h.combine("font"); h.combine(icon.path); h.combine(icon.strokes); h.combine(weight); h.combine(scale)
 		let key = NSNumber(value: h.finalize())
 		if let hit = cache.object(forKey: key) { return hit }
-		let result = outline(icon, width: weight * unitsPer24px)
+		let result = outline(icon, width: weight.map { $0 * unitsPer24px }, transform: scaling(scale, width: icon.width))
 		cache.setObject(result, forKey: key)
 		return result
+	}
+
+	/// em 가운데(가로 폭/2, 세로 500) 기준으로 키우는 변환
+	static func scaling(_ scale: Double, width: Double) -> CGAffineTransform {
+		guard scale != 1 else { return .identity }
+		let cx = width / 2, cy = 500.0
+		return CGAffineTransform(translationX: cx, y: cy).scaledBy(x: scale, y: scale).translatedBy(x: -cx, y: -cy)
+	}
+
+	/// 이미 외곽선인 모양(채우기 원본, 폰트에 복사해 둔 모양)을 배율만큼 키운다
+	static func scaled(_ path: CGPath, scale: Double, width: Double) -> CGPath {
+		guard scale != 1 else { return path }
+		var t = scaling(scale, width: width)
+		return path.copy(using: &t) ?? path
 	}
 
 	static func pathString(_ icon: Icon, in group: IconGroup) -> String {
@@ -56,12 +71,15 @@ enum IconShape {
 
 	/// 채우기 부분 + 선들을 외곽선으로 바꿔 합친다. width 가 nil 이면 선마다 원래 굵기.
 	/// 그린 방향(시계/반시계)이 서로 달라도 안쪽이 지워지지 않게 도형 합집합으로 합친다
-	static func outline(_ icon: Icon, width: Double?) -> CGPath {
-		var result: CGPath? = icon.hasFill ? SVGPath.cgPath(icon.path).normalized(using: .winding) : nil
+	/// transform 은 선을 긋기 전에 선 중심(과 채우기 부분)에 적용한다
+	static func outline(_ icon: Icon, width: Double?, transform: CGAffineTransform = .identity) -> CGPath {
+		var t = transform
+		func moved(_ p: CGPath) -> CGPath { t.isIdentity ? p : (p.copy(using: &t) ?? p) }
+		var result: CGPath? = icon.hasFill ? moved(SVGPath.cgPath(icon.path)).normalized(using: .winding) : nil
 		for part in icon.strokes ?? [] {
 			let w = width ?? part.width
 			guard w > 0 else { continue }
-			let o = SVGPath.cgPath(part.d).copy(strokingWithWidth: w, lineCap: cap(part.cap), lineJoin: join(part.join), miterLimit: 4)
+			let o = moved(SVGPath.cgPath(part.d)).copy(strokingWithWidth: w, lineCap: cap(part.cap), lineJoin: join(part.join), miterLimit: 4)
 				.normalized(using: .winding)
 			result = result.map { $0.union(o, using: .winding) } ?? o
 		}

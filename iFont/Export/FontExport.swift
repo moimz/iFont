@@ -12,15 +12,18 @@ enum FontExport {
 	/// CSS @version 값: 큰 버전.아이콘 수.내려받은 횟수
 	static func version(_ font: FontDoc) -> String { "\(font.version).\(font.glyphs.count).\(font.downloads)" }
 
-	/// 폰트에 넣을 모양들 (CSS 순서). 선 그룹 원본은 폰트 선 굵기로, 그 밖에는 폰트에 복사해 둔 모양으로
+	/// 폰트에 넣을 모양들 (CSS 순서). 선 그룹 원본은 폰트 선 굵기로, 그 밖에는 폰트에 복사해 둔 모양으로. 크기 배율도 적용
 	static func glyphs(_ font: FontDoc, store: Store) -> [Glyph] {
-		font.orderedGlyphs.map { g in
-			if let group = store.group(g.groupID), let icon = store.icon(of: g),
-			   let p = IconShape.fontPath(icon, in: group, weight: font.weight) {
-				return Glyph(glyph: g, shape: p)
-			}
-			return Glyph(glyph: g, shape: SVGPath.cgPath(g.path))
+		font.orderedGlyphs.map { Glyph(glyph: $0, shape: shape($0, in: font, store: store)) }
+	}
+
+	/// 폰트 아이콘 하나의 최종 모양 (내보내기·화면 미리보기가 같이 쓴다)
+	static func shape(_ g: FontGlyph, in font: FontDoc, store: Store) -> CGPath {
+		if let group = store.group(g.groupID), let icon = store.icon(of: g),
+		   let p = IconShape.fontPath(icon, in: group, weight: font.weight, scale: font.scale) {
+			return p
 		}
+		return IconShape.scaled(SVGPath.cgPath(g.path), scale: font.scale, width: g.width)
 	}
 
 	/// 폴더에 네 파일을 쓴다. 쓴 파일 목록을 돌려준다

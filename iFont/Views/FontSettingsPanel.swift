@@ -10,6 +10,7 @@ struct FontSettingsPanel: View {
 			Section("기본") {
 				TextField("폰트 이름", text: $font.name)
 				WeightPicker(weight: $font.weight)
+				ScaleField(scale: $font.scale)
 				// 큰 버전만 고치고, 뒤의 아이콘 수.다음 내려받기 횟수는 회색으로
 				SuffixField(suffix: ".\(font.glyphs.count).\(font.downloads + 1)") {
 					TextField("버전", value: $font.version, format: .number.grouping(.never))
@@ -54,6 +55,19 @@ struct FontSettingsPanel: View {
 			PanelButton(title: "폰트 다운로드", systemImage: "arrow.down.circle", action: onExport)
 				.disabled(font.glyphs.isEmpty)
 		}
+	}
+}
+
+/// 크기 배율: 1 이 원래 크기. 0.5 ~ 1.5, 0.01 단위
+struct ScaleField: View {
+	@Binding var scale: Double
+	var body: some View {
+		SuffixField(suffix: "배") {
+			TextField("크기 배율", value: Binding(get: { scale }, set: { v in
+				scale = min(max((v * 100).rounded() / 100, 0.5), 1.5)
+			}), format: .number.precision(.fractionLength(0...2)), prompt: Text("1"))
+		}
+		.help("내보낼 때 글리프를 em 가운데 기준으로 키웁니다. 선 굵기는 그대로이고 원본 아이콘은 바뀌지 않습니다. 1.09 를 넘으면 끝까지 뻗는 아이콘이 칸을 벗어납니다")
 	}
 }
 
