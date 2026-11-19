@@ -24,13 +24,14 @@ Fontello · IcoMoon 처럼 쓰되, 아이콘 세트와 폰트를 내 맥(그리�
 - Fontello `config.json` 으로 폰트 가져오기
 - 파일 › 내보내기… / 불러오기… — 모든 폰트·그룹을 JSON 하나로 백업, 불러올 때는 병합
 - iCloud Drive 동기화 (로그인돼 있지 않으면 이 맥에만 저장)
+- 자동 업데이트 (Sparkle): 하루 한 번 GitHub 릴리즈에서 새 버전을 확인하고 설치할지 묻는다. 메뉴 iFont › 업데이트 확인…, 설정(⌘,)에서 끄기
 
 ## 요구 사항
 
 - macOS 26 이상, Apple silicon(arm64)
 - 빌드: Xcode 26 이상
 
-외부 패키지는 없습니다. Apple 기본 프레임워크(SwiftUI, CoreGraphics, CoreText, Compression)만 씁니다.
+외부 패키지는 자동 업데이트용 [Sparkle](https://sparkle-project.org)(MIT) 하나뿐이고, 나머지는 Apple 기본 프레임워크(SwiftUI, CoreGraphics, CoreText, Compression)입니다.
 woff2 의 Brotli 압축은 Apple `Compression` 을 씁니다.
 
 ## 빌드

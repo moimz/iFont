@@ -5,6 +5,8 @@ struct iFontApp: App {
 	@State private var store: Store = {
 		let s = Store()
 		s.load()
+		// 자동 업데이트(Sparkle)를 앱이 뜰 때 한 번 만들어 둔다 (하루 한 번 확인)
+		_ = Updater.shared
 		// 다른 기기에서 iCloud 로 바뀐 파일이 오면 다시 읽는다
 		CloudWatcher.shared.start { s.reloadIfChangedOutside() }
 		return s
@@ -25,6 +27,9 @@ struct iFontApp: App {
 		}
 		.windowToolbarStyle(.unified)
 		.commands {
+			CommandGroup(after: .appInfo) {
+				UpdateMenuButton()
+			}
 			CommandGroup(after: .newItem) {
 				// 앱 밖에서 폰트·그룹 파일을 고쳤을 때 다시 읽는다
 				Button("모두 다시 읽기") { _ = store.reloadAll() }
@@ -36,6 +41,11 @@ struct iFontApp: App {
 				Button("내보내기…") { BackupMenu.exportAll(store) }
 					.keyboardShortcut("e", modifiers: [.command, .shift])
 			}
+		}
+
+		// 앱 설정 (⌘,): 업데이트
+		Settings {
+			AppSettingsView()
 		}
 	}
 
