@@ -27,7 +27,9 @@ struct iFontApp: App {
 		}
 		.windowToolbarStyle(.unified)
 		.commands {
-			CommandGroup(after: .appInfo) {
+			// iFont에 관하여: 기본 정보 창 대신 직접 만든 창 (AboutView), 그 아래 업데이트 확인
+			CommandGroup(replacing: .appInfo) {
+				AboutMenuButton()
 				UpdateMenuButton()
 			}
 			CommandGroup(after: .newItem) {
@@ -42,6 +44,15 @@ struct iFontApp: App {
 					.keyboardShortcut("e", modifiers: [.command, .shift])
 			}
 		}
+
+		// iFont 정보 창
+		Window("iFont 정보", id: AboutView.windowID) {
+			AboutView()
+		}
+		.windowResizability(.contentSize)
+		.windowStyle(.hiddenTitleBar)
+		.restorationBehavior(.disabled)
+		.defaultPosition(.center)
 
 		// 앱 설정 (⌘,): 업데이트
 		Settings {

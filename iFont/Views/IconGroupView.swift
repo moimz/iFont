@@ -33,6 +33,9 @@ struct IconGroupView: View {
 
 	static let importTypes: [UTType] = [.svg, .font, .folder] + ["woff", "woff2", "css"].compactMap { UTType(filenameExtension: $0) }
 
+	/// 앱에 기본으로 들어 있는 그룹 (Lucide·Tabler): 보기·복사·폰트에 추가·다운로드만 되고 고칠 수 없다
+	private var locked: Bool { group.isBuiltIn }
+
 	var body: some View {
 		let icons = search.isEmpty ? group.icons : group.icons.filter { $0.matches(search, prefix: group.prefix) }
 		Group {
@@ -72,7 +75,7 @@ struct IconGroupView: View {
 				.focusable()
 				.focusEffectDisabled()
 				.focused($gridFocused)
-				.onDeleteCommand { delete(selected) }
+				.onDeleteCommand { if !locked { delete(selected) } }
 				.onCopyCommand {
 					// 고른 아이콘들을 그룹 선 굵기를 적용한 SVG 로 복사 (여러 개면 빈 줄로 이어서)
 					return SVGExport.providers(group.icons.filter { selected.contains($0.id) }.map(svg))
@@ -80,7 +83,7 @@ struct IconGroupView: View {
 			}
 		}
 		.navigationTitle(group.name)
-		.navigationSubtitle("아이콘 \(group.icons.count)개")
+		.navigationSubtitle(locked ? "아이콘 \(group.icons.count)개 · 기본 그룹 (고칠 수 없음)" : "아이콘 \(group.icons.count)개")
 		.confirmationDialog(pendingDelete.map { "아이콘 \($0.count)개를 삭제할까요?" } ?? "",
 		                    isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })) {
 			Button("삭제", role: .destructive) {
@@ -95,7 +98,8 @@ struct IconGroupView: View {
 		.toolbar {
 			ToolbarItem {
 				Button { importing = true } label: { Label("아이콘 추가", systemImage: "plus") }
-					.help("아이콘 추가 (SVG, 폰트 파일, CSS, 폴더)")
+					.help(locked ? "기본 그룹에는 아이콘을 추가할 수 없습니다" : "아이콘 추가 (SVG, 폰트 파일, CSS, 폴더)")
+					.disabled(locked)
 			}
 			ToolbarSpacer(.fixed)
 			ToolbarItemGroup {
@@ -167,7 +171,7 @@ struct IconGroupView: View {
 	private func iconMenu(_ icon: Icon) -> some View {
 		// 고른 아이콘 위에서 열면 고른 것 전체에, 아니면 그 아이콘에만
 		let targets = selected.contains(icon.id) ? selected : [icon.id]
-		Button("이름 바꾸기…") { newName = icon.name; renaming = icon }
+		if !locked { Button("이름 바꾸기…") { newName = icon.name; renaming = icon } }
 		if let code = icon.code { Button("\(code.cssEscape) 복사") { copy(code.cssEscape) } }
 		Button("\(group.prefix + icon.name) 복사") { copy(group.prefix + icon.name) }
 		Button(selected.contains(icon.id) && selected.count > 1 ? "SVG 복사 (\(selected.count)개)" : "SVG 복사") {
@@ -185,6 +189,17 @@ struct IconGroupView: View {
 				addToFont(targets, f)
 			}
 		}
+		if !locked { categoryMenu(icon, targets) }
+		Button(targets.count > 1 ? "SVG 다운로드… (\(targets.count)개, zip)" : "SVG 다운로드…") { downloadSVG(targets) }
+		if !locked {
+			Button(targets.count > 1 ? "여백 맞추기… (\(targets.count)개)" : "여백 맞추기…") { fitting = FitTarget(ids: targets) }
+			Divider()
+			Button("삭제", role: .destructive) { delete(targets) }
+		}
+	}
+
+	@ViewBuilder
+	private func categoryMenu(_ icon: Icon, _ targets: Set<String>) -> some View {
 		Menu(targets.count > 1 ? "분류 (\(targets.count)개)" : "분류") {
 			ForEach(group.categories, id: \.self) { c in
 				Button { group.setCategory(c, for: targets) } label: {
@@ -195,10 +210,6 @@ struct IconGroupView: View {
 			Button("분류 없음") { group.setCategory(nil, for: targets) }
 			Button("새 분류…") { categoryName = ""; newCategoryFor = targets }
 		}
-		Button(targets.count > 1 ? "SVG 다운로드… (\(targets.count)개, zip)" : "SVG 다운로드…") { downloadSVG(targets) }
-		Button(targets.count > 1 ? "여백 맞추기… (\(targets.count)개)" : "여백 맞추기…") { fitting = FitTarget(ids: targets) }
-		Divider()
-		Button("삭제", role: .destructive) { delete(targets) }
 	}
 
 	/// 그룹 순서대로 정렬한 대상 아이콘 id
@@ -248,7 +259,7 @@ struct IconGroupView: View {
 		.background(.bar)
 		.contentShape(.rect)
 		.contextMenu {
-			if let category {
+			if let category, !locked {
 				Button("분류 이름 바꾸기…") { categoryName = category; renamingCategory = category }
 				Button("위로 옮기기") { group.moveCategory(category, by: -1) }
 				Button("아래로 옮기기") { group.moveCategory(category, by: 1) }
@@ -337,6 +348,16 @@ struct IconGroupSettingsPanel: View {
 
 	var body: some View {
 		Form {
+			if group.isBuiltIn {
+				Section {
+					Label("앱에 기본으로 들어 있는 아이콘그룹입니다", systemImage: "lock.fill")
+					if let license = BuiltInGroups.license(group.id) { LabeledContent("라이선스", value: license) }
+				} footer: {
+					Text("고칠 수 없고 iCloud 로 동기화하지 않습니다. 아이콘을 복사하거나 폰트·다른 그룹으로 끌어다 쓸 수 있습니다(다른 그룹으로는 복사됩니다).")
+						.font(.caption).foregroundStyle(.secondary)
+				}
+			}
+			Group {
 			Section("기본") {
 				TextField("CSS 접두어", text: $group.prefix, prompt: Text("예: xi-"))
 			}
@@ -357,6 +378,8 @@ struct IconGroupSettingsPanel: View {
 			} footer: {
 				Text(styleNote).font(.caption).foregroundStyle(.secondary)
 			}
+			}
+			.disabled(group.isBuiltIn)
 			Section("요약") {
 				LabeledContent("아이콘", value: "\(group.icons.count)개")
 				if !group.categories.isEmpty { LabeledContent("분류", value: "\(group.categories.count)개") }

@@ -33,7 +33,8 @@ struct Backup: Codable {
 		let encoder = JSONEncoder()
 		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 		encoder.dateEncodingStrategy = .iso8601
-		return try encoder.encode(Backup(groups: store.groups, fonts: store.fonts))
+		// 기본 그룹(Lucide·Tabler)은 앱에 들어 있으므로 빼고, 폰트가 그 원본을 가리키는 id 만 남긴다
+		return try encoder.encode(Backup(groups: store.groups.filter { !$0.isBuiltIn }, fonts: store.fonts))
 	}
 
 	static func decode(_ data: Data) throws -> Backup {
@@ -55,7 +56,9 @@ extension Store {
 		var iconMap: [UUID: [String: String]] = [:]
 
 		for var incoming in backup.groups {
-			guard let gi = groups.firstIndex(where: { $0.id == incoming.id }) ?? groups.firstIndex(where: { $0.name == incoming.name }) else {
+			// 예전 백업에 든 기본 그룹은 건너뛴다 (앱에 든 것을 그대로 쓴다)
+			if incoming.isBuiltIn { groupMap[incoming.id] = incoming.id; continue }
+			guard let gi = groups.firstIndex(where: { $0.id == incoming.id }) ?? groups.firstIndex(where: { $0.name == incoming.name && !$0.isBuiltIn }) else {
 				groupMap[incoming.id] = incoming.id
 				groups.append(incoming)
 				report.groupsAdded += 1
@@ -144,11 +147,11 @@ enum BackupMenu {
 		panel.allowedContentTypes = [.json]
 		let day = Date().formatted(.iso8601.year().month().day().dateSeparator(.dash))
 		panel.nameFieldStringValue = "iFont-\(day).json"
-		panel.message = "모든 폰트(\(store.fonts.count)개)와 아이콘그룹(\(store.groups.count)개)을 JSON 파일 하나로 내보냅니다."
+		panel.message = "모든 폰트(\(store.fonts.count)개)와 아이콘그룹(\(store.groups.filter { !$0.isBuiltIn }.count)개, 기본 그룹은 빼고)을 JSON 파일 하나로 내보냅니다."
 		guard panel.runModal() == .OK, let url = panel.url else { return }
 		do {
 			try Backup.encode(store).write(to: url, options: .atomic)
-			alert("내보냈습니다", "폰트 \(store.fonts.count)개, 아이콘그룹 \(store.groups.count)개\n\(url.path)", reveal: url)
+			alert("내보냈습니다", "폰트 \(store.fonts.count)개, 아이콘그룹 \(store.groups.filter { !$0.isBuiltIn }.count)개\n\(url.path)", reveal: url)
 		} catch {
 			alert("내보내지 못했습니다", error.localizedDescription)
 		}

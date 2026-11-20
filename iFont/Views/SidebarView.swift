@@ -36,33 +36,38 @@ struct SidebarView: View {
 			Section("아이콘그룹") {
 				ForEach(store.groups) { group in
 					let item = SidebarItem.group(group.id)
-					row(item, name: group.name, count: group.icons.count, icon: "square.grid.3x3")
+					row(item, name: group.name, count: group.icons.count, icon: "square.grid.3x3", locked: group.isBuiltIn)
 						.tag(item)
 						.contextMenu { menu(item, name: group.name) }
-						// 다른 아이콘그룹에서 끌어온 아이콘을 이 그룹으로 옮긴다
+						// 다른 아이콘그룹에서 끌어온 아이콘을 이 그룹으로 옮긴다 (기본 그룹에서 끌어오면 복사, 기본 그룹으로는 넣지 않는다)
 						.dropDestination(for: String.self) { items, _ in
+							guard !group.isBuiltIn else { return false }
 							var moved = 0, rejected = 0, converted = 0
+							let copied = items.compactMap(IconDrag.decode).contains { BuiltInGroups.ids.contains($0.groupID) }
 							for s in items {
 								guard let d = IconDrag.decode(s), d.groupID != group.id else { continue }
 								let r = store.moveIcons(d.iconIDs, from: d.groupID, to: group.id)
 								moved += r.moved; rejected += r.rejected; converted += r.converted
 							}
-							var note = moved > 0 ? "\(group.name) 그룹으로 \(moved)개를 옮겼습니다." : ""
+							var note = moved > 0 ? "\(group.name) 그룹으로 \(moved)개를 \(copied ? "복사했습니다" : "옮겼습니다")." : ""
 							if converted > 0 { note += " 선 아이콘 \(converted)개는 채우기로 바꿨습니다." }
 							if rejected > 0 { note += " 채우기 아이콘 \(rejected)개는 선 그룹이라 옮기지 않았습니다." }
 							if !note.isEmpty { dropNote = note.trimmingCharacters(in: .whitespaces) }
 							return moved > 0
-						} isTargeted: { on in dropTarget = on ? group.id : (dropTarget == group.id ? nil : dropTarget) }
+						} isTargeted: { on in
+							guard !group.isBuiltIn else { return }
+							dropTarget = on ? group.id : (dropTarget == group.id ? nil : dropTarget)
+						}
 						.listRowBackground(dropTarget == group.id ? Color.accentColor.opacity(0.25) : nil)
 				}
 			}
 		}
 		.onKeyPress(.return) {
-			guard renaming == nil, let selection else { return .ignored }
+			guard renaming == nil, let selection, !isLocked(selection) else { return .ignored }
 			startRename(selection)
 			return .handled
 		}
-		.onDeleteCommand { if renaming == nil, selection != .search { pendingDelete = selection } }
+		.onDeleteCommand { if renaming == nil, selection != .search, let selection, !isLocked(selection) { pendingDelete = selection } }
 		.safeAreaInset(edge: .bottom) {
 			if dropNote == nil {
 				Label(StorageLocation.shared.isCloud ? "iCloud 동기화" : "이 맥에만 저장", systemImage: StorageLocation.shared.isCloud ? "icloud" : "internaldrive")
@@ -106,8 +111,23 @@ struct SidebarView: View {
 		}
 	}
 
+	/// 기본 그룹(Lucide·Tabler)은 이름 바꾸기·삭제·다시 읽기를 못 한다
+	private func isLocked(_ item: SidebarItem) -> Bool {
+		if case .group(let id) = item { return BuiltInGroups.ids.contains(id) }
+		return false
+	}
+
 	@ViewBuilder
 	private func menu(_ item: SidebarItem, name: String) -> some View {
+		if isLocked(item) {
+			Text("기본 아이콘그룹 (고칠 수 없음)")
+		} else {
+			editMenu(item)
+		}
+	}
+
+	@ViewBuilder
+	private func editMenu(_ item: SidebarItem) -> some View {
 		Button("이름 바꾸기") { startRename(item) }
 		if case .group(let id) = item {
 			Button("다시 읽기") { store.reloadGroup(id) }
@@ -115,7 +135,7 @@ struct SidebarView: View {
 		Button("삭제…", role: .destructive) { pendingDelete = item }
 	}
 
-	private func row(_ item: SidebarItem, name: String, count: Int, icon: String) -> some View {
+	private func row(_ item: SidebarItem, name: String, count: Int, icon: String, locked: Bool = false) -> some View {
 		Label {
 			HStack {
 				if renaming == item {
@@ -127,6 +147,11 @@ struct SidebarView: View {
 						.onChange(of: nameFocused) { if !nameFocused { commitRename() } }
 				} else {
 					Text(name)
+				}
+				if locked {
+					// 앱에 기본으로 들어 있는 그룹: 고칠 수 없고 iCloud 로 동기화하지 않는다
+					Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.secondary)
+						.help("앱에 기본으로 들어 있는 아이콘그룹입니다. 고칠 수 없고 iCloud 로 동기화하지 않습니다.")
 				}
 				Spacer()
 				Text("\(count)").foregroundStyle(.secondary).monospacedDigit()

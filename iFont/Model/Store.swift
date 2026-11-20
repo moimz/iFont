@@ -97,28 +97,33 @@ final class Store {
 
 	/// 원본 아이콘을 지운다. 그 원본을 쓰는 폰트 아이콘도 함께 빠진다
 	func deleteIcons(_ ids: Set<String>, from groupID: UUID) {
+		guard !BuiltInGroups.ids.contains(groupID) else { return }   // 기본 그룹은 고칠 수 없다
 		if let g = groups.firstIndex(where: { $0.id == groupID }) { groups[g].icons.removeAll { ids.contains($0.id) } }
 		for f in fonts.indices { fonts[f].glyphs.removeAll { $0.groupID == groupID && ids.contains($0.iconID) } }
 	}
 
 	/// 아이콘을 다른 그룹으로 옮긴다. 폰트 아이콘은 옮긴 그룹을 원본으로 계속 가리킨다.
+	/// 기본 그룹(Lucide·Tabler)에서는 옮기지 않고 복사한다 (원본·폰트 연결은 그대로). 기본 그룹으로는 넣을 수 없다
 	/// - 선 그룹으로는 선 아이콘만 (채우기 아이콘은 남긴다), 채우기 그룹으로 가는 선 아이콘은 채우기로 바뀐다
 	/// - 옮긴 그룹에서 이미 쓰는 코드면 빈 코드를 새로 붙인다. 분류는 옮긴 그룹에 없으면 만든다
 	@discardableResult
 	func moveIcons(_ ids: [String], from sourceID: UUID, to targetID: UUID) -> (moved: Int, rejected: Int, converted: Int) {
-		guard sourceID != targetID, let s = groups.firstIndex(where: { $0.id == sourceID }),
+		guard sourceID != targetID, !BuiltInGroups.ids.contains(targetID), let s = groups.firstIndex(where: { $0.id == sourceID }),
 		      let t = groups.firstIndex(where: { $0.id == targetID }) else { return (0, 0, 0) }
+		let copying = BuiltInGroups.ids.contains(sourceID)
 		let wanted = Set(ids)
 		let used = Set(groups[t].icons.compactMap(\.code))
 		var r = IconImport.Result()
 		r.icons = groups[s].icons.filter { wanted.contains($0.id) }.map { icon in
 			var icon = icon
 			if let c = icon.code, used.contains(c) { icon.code = nil }
+			if copying { icon.id = makeUID() }   // 복사본은 새 id (원본과 섞이지 않게)
 			return icon
 		}
 		groups[t].add(&r)
 		let moved = Set(r.icons.map(\.id))
 		for c in r.icons.compactMap(\.category) where !groups[t].categories.contains(c) { groups[t].categories.append(c) }
+		if copying { return (moved.count, r.rejected.count, r.converted) }
 		groups[s].icons.removeAll { moved.contains($0.id) }
 		if groups[s].style == .fill { groups[s].baseWeight = IconShape.measureBase(groups[s].icons) }
 		for f in fonts.indices {
@@ -131,6 +136,7 @@ final class Store {
 
 	/// 그룹을 지운다. 그 그룹의 원본을 쓰는 폰트 아이콘도 함께 빠진다
 	func deleteGroup(_ id: UUID) {
+		guard !BuiltInGroups.ids.contains(id) else { return }
 		groups.removeAll { $0.id == id }
 		for f in fonts.indices { fonts[f].glyphs.removeAll { $0.groupID == id } }
 	}
@@ -174,11 +180,19 @@ final class Store {
 			let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
 			return files.filter { $0.pathExtension == "json" }.compactMap { try? decoder.decode(T.self, from: Data(contentsOf: $0)) }
 		}
-		groups = (read("IconGroups") as [IconGroup]).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+		// 기본 그룹(앱 번들)을 맨 앞에, 사용자 그룹은 이름 순. 예전에 iCloud 에 두었던 기본 그룹 사본은 지운다 (앱에 들어 있으므로)
+		let builtIn = BuiltInGroups.load()
+		// (번들에서 제대로 읽은 그룹만 지운다 — 못 읽었으면 iCloud 사본을 그대로 쓴다)
+		let loadedIDs = Set(builtIn.map(\.id))
+		for id in loadedIDs where FileManager.default.fileExists(atPath: Self.fileURL("IconGroups", id).path) {
+			StorageLocation.remove(Self.fileURL("IconGroups", id))
+		}
+		groups = builtIn + (read("IconGroups") as [IconGroup]).filter { !loadedIDs.contains($0.id) }
+			.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 		fonts = (read("Fonts") as [FontDoc]).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-		savedGroups = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0) })
+		savedGroups = Dictionary(uniqueKeysWithValues: groups.filter { !$0.isBuiltIn }.map { ($0.id, $0) })
 		// 예전 버전이 코드 없이 저장한 아이콘은 uE600 같은 이름에서 코드를 채운다
-		for g in groups.indices {
+		for g in groups.indices where !groups[g].isBuiltIn {
 			for i in groups[g].icons.indices where groups[g].icons[i].code == nil {
 				groups[g].icons[i].code = Icon.codeFromPlaceholder(groups[g].icons[i].name)
 			}
@@ -222,6 +236,7 @@ final class Store {
 	/// 그룹 하나를 파일에서 다시 읽는다. 파일이 없으면 false
 	@discardableResult
 	func reloadGroup(_ id: UUID) -> Bool {
+		guard !BuiltInGroups.ids.contains(id) else { return false }
 		guard let g: IconGroup = Self.readFile("IconGroups", id) else { return false }
 		if let i = groups.firstIndex(where: { $0.id == id }) { groups[i] = g } else { groups.append(g) }
 		savedGroups[id] = g
@@ -247,10 +262,11 @@ final class Store {
 			out += new.filter { !known.contains($0.id) }
 			return out
 		}
-		let g: [IconGroup] = read("IconGroups"), f: [FontDoc] = read("Fonts")
-		groups = merge(groups, g, kind: "IconGroups")
+		let g: [IconGroup] = (read("IconGroups") as [IconGroup]).filter { !$0.isBuiltIn }, f: [FontDoc] = read("Fonts")
+		// 기본 그룹은 파일에서 읽지 않으므로 그대로 맨 앞에 둔다
+		groups = groups.filter(\.isBuiltIn) + merge(groups.filter { !$0.isBuiltIn }, g, kind: "IconGroups")
 		fonts = merge(fonts, f, kind: "Fonts")
-		savedGroups = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0) })
+		savedGroups = Dictionary(uniqueKeysWithValues: groups.filter { !$0.isBuiltIn }.map { ($0.id, $0) })
 		savedFonts = Dictionary(uniqueKeysWithValues: fonts.map { ($0.id, $0) })
 		fileDates = Self.currentDates()
 		return (groups.count, fonts.count)
@@ -258,7 +274,8 @@ final class Store {
 
 	/// 바뀐 것만 파일로 쓰고, 없어진 것은 파일을 지운다.
 	func save() {
-		sync(groups, &savedGroups, kind: "IconGroups")
+		// 기본 그룹은 앱에 들어 있어 저장·동기화하지 않는다
+		sync(groups.filter { !$0.isBuiltIn }, &savedGroups, kind: "IconGroups")
 		sync(fonts, &savedFonts, kind: "Fonts")
 	}
 
